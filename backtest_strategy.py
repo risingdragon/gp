@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 import platform
@@ -18,9 +19,9 @@ if system_name == 'Windows':
         except:
             continue
 
-print("=" * 80)
-print("青农商行(002958) 定投策略回测")
-print("=" * 80)
+print("=" * 60)
+print("青农商行(002958)定投策略回测")
+print("=" * 60)
 
 df = pd.read_csv('qrcb_historical_data.csv')
 df['date'] = pd.to_datetime(df['date'])
@@ -90,157 +91,87 @@ def backtest_sip(data, invest_day=1):
         'investment_dates': investment_dates
     }
 
-strategies = [
-    ("每月1日定投", 1),
-    ("每月15日定投", 15),
-    ("每月最后1日定投", -1),
-    ("每月最低点定投(理想)", 'lowest'),
-    ("每月最高点定投(最差)", 'highest'),
-]
+invest_day = 1
+result = backtest_sip(df, invest_day=invest_day)
 
-results = {}
-for name, day in strategies:
-    results[name] = backtest_sip(df, day)
+print(f"\n{'=' * 60}")
+print(f"策略: 每月{invest_day}日定投 {monthly_investment} 元")
+print(f"{'=' * 60}")
+print(f"\n定投次数: {result['investment_count']} 次")
+print(f"总投入金额: {result['total_invested']:.2f} 元")
+print(f"期末总资产: {result['final_value']:.2f} 元")
+print(f"总收益: {result['total_profit']:.2f} 元")
+print(f"收益率: {result['profit_rate']:.2f}%")
+print(f"年化收益率: {result['annualized_return']:.2f}%")
 
-print("\n" + "=" * 80)
-print("策略对比结果")
-print("=" * 80)
-print(f"{'策略名称':<25} {'定投次数':<10} {'总投入(元)':<12} {'期末资产(元)':<15} {'总收益(元)':<12} {'收益率(%)':<12} {'年化(%)':<10}")
-print("-" * 100)
+print(f"\n单笔投资对比 (一次性买入 {result['total_invested']:.2f} 元):")
+one_time_shares = result['total_invested'] / df['close'].iloc[0]
+one_time_value = one_time_shares * df['close'].iloc[-1]
+one_time_profit = one_time_value - result['total_invested']
+one_time_profit_rate = (one_time_profit / result['total_invested']) * 100 if result['total_invested'] > 0 else 0
+print(f"一次性买入收益: {one_time_profit:.2f} 元 ({one_time_profit_rate:.2f}%)")
 
-valid_results = {k: v for k, v in results.items() if v['investment_count'] > 0}
-sorted_strategies = sorted(valid_results.items(), key=lambda x: x[1]['profit_rate'], reverse=True)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
 
-for name, result in sorted_strategies:
-    print(f"{name:<25} "
-          f"{result['investment_count']:<10} "
-          f"{result['total_invested']:<12.2f} "
-          f"{result['final_value']:<15.2f} "
-          f"{result['total_profit']:<12.2f} "
-          f"{result['profit_rate']:<12.2f} "
-          f"{result['annualized_return']:<10.2f}")
+ax1.plot(df.index, df['close'], label='收盘价', linewidth=1.5, color='blue')
+if len(result['investment_dates']) > 0:
+    dates = [x['date'] for x in result['investment_dates']]
+    prices = [x['price'] for x in result['investment_dates']]
+    ax1.scatter(dates, prices, color='red', s=50, zorder=5, label='定投日')
+ax1.set_title('青农商行(002958) 价格走势与定投点', fontsize=14, fontweight='bold')
+ax1.set_ylabel('价格 (元)', fontsize=12)
+ax1.legend(fontsize=10)
+ax1.grid(True, alpha=0.3)
 
-print("\n" + "=" * 80)
-if sorted_strategies:
-    best_strategy = sorted_strategies[0]
-    worst_strategy = sorted_strategies[-1]
-    print(f"最优策略: {best_strategy[0]} (收益率: {best_strategy[1]['profit_rate']:.2f}%)")
-    print(f"最差策略: {worst_strategy[0]} (收益率: {worst_strategy[1]['profit_rate']:.2f}%)")
-    print(f"策略差异: {best_strategy[1]['profit_rate'] - worst_strategy[1]['profit_rate']:.2f}%")
+portfolio_values = []
+total_invested_list = []
+current_shares = 0
+current_invested = 0
+invest_dict = {x['date']: x['shares'] for x in result['investment_dates']}
 
-    one_time_shares = best_strategy[1]['total_invested'] / df['close'].iloc[0]
-    one_time_value = one_time_shares * df['close'].iloc[-1]
-    one_time_profit = one_time_value - best_strategy[1]['total_invested']
-    one_time_profit_rate = (one_time_profit / best_strategy[1]['total_invested']) * 100
+for date in df.index:
+    if date in invest_dict:
+        current_shares += invest_dict[date]
+        current_invested += monthly_investment
+    value = current_shares * df.loc[date, 'close']
+    portfolio_values.append(value)
+    total_invested_list.append(current_invested)
 
-    print(f"\n一次性买入对比: {one_time_profit:.2f} 元 ({one_time_profit_rate:.2f}%)")
-print("=" * 80)
-
-fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-
-strategy_names = list(valid_results.keys())
-profit_rates = [valid_results[name]['profit_rate'] for name in strategy_names]
-colors = ['green' if x >= 0 else 'red' for x in profit_rates]
-
-bars = axes[0, 0].barh(strategy_names, profit_rates, color=colors, alpha=0.7)
-axes[0, 0].set_xlabel('收益率 (%)', fontsize=12)
-axes[0, 0].set_title('各策略收益率对比', fontsize=14, fontweight='bold')
-axes[0, 0].axvline(x=0, color='black', linestyle='-', linewidth=0.8)
-axes[0, 0].grid(True, alpha=0.3, axis='x')
-
-for i, bar in enumerate(bars):
-    width = bar.get_width()
-    axes[0, 0].text(width + (0.5 if width >= 0 else -3), 
-                   bar.get_y() + bar.get_height()/2,
-                   f'{profit_rates[i]:.2f}%',
-                   va='center', fontsize=10)
-
-annualized_returns = [valid_results[name]['annualized_return'] for name in strategy_names]
-colors = ['green' if x >= 0 else 'red' for x in annualized_returns]
-
-bars2 = axes[0, 1].barh(strategy_names, annualized_returns, color=colors, alpha=0.7)
-axes[0, 1].set_xlabel('年化收益率 (%)', fontsize=12)
-axes[0, 1].set_title('各策略年化收益率对比', fontsize=14, fontweight='bold')
-axes[0, 1].axvline(x=0, color='black', linestyle='-', linewidth=0.8)
-axes[0, 1].grid(True, alpha=0.3, axis='x')
-
-for i, bar in enumerate(bars2):
-    width = bar.get_width()
-    axes[0, 1].text(width + (0.1 if width >= 0 else -0.5), 
-                    bar.get_y() + bar.get_height()/2,
-                    f'{annualized_returns[i]:.2f}%',
-                    va='center', fontsize=10)
-
-axes[1, 0].plot(df.index, df['close'], label='收盘价', linewidth=1.5, color='blue')
-axes[1, 0].set_title('青农商行(002958) 价格走势', fontsize=14, fontweight='bold')
-axes[1, 0].set_ylabel('价格 (元)', fontsize=12)
-axes[1, 0].legend(fontsize=10)
-axes[1, 0].grid(True, alpha=0.3)
-
-for name, result in valid_results.items():
-    if len(result['investment_dates']) > 0:
-        dates = [x['date'] for x in result['investment_dates']]
-        prices = [x['price'] for x in result['investment_dates']]
-        if name == "每月最低点定投(理想)":
-            axes[1, 0].scatter(dates, prices, color='green', s=30, alpha=0.6, label=name)
-        elif name == "每月最高点定投(最差)":
-            axes[1, 0].scatter(dates, prices, color='red', s=30, alpha=0.6, label=name)
-
-axes[1, 0].legend(fontsize=9, loc='best')
-
-if valid_results:
-    total_invested_ref = valid_results['每月1日定投']['total_invested'] if '每月1日定投' in valid_results else list(valid_results.values())[0]['total_invested']
-    for name, result in valid_results.items():
-        portfolio_values = []
-        current_shares = 0
-        invest_dict = {x['date']: x['shares'] for x in result['investment_dates']}
-        
-        for date in df.index:
-            if date in invest_dict:
-                current_shares += invest_dict[date]
-            value = current_shares * df.loc[date, 'close']
-            portfolio_values.append(value)
-        
-        if name == "每月最低点定投(理想)":
-            axes[1, 1].plot(df.index, portfolio_values, label=name, linewidth=2, color='green')
-        elif name == "每月最高点定投(最差)":
-            axes[1, 1].plot(df.index, portfolio_values, label=name, linewidth=2, color='red')
-        else:
-            axes[1, 1].plot(df.index, portfolio_values, label=name, linewidth=1.5, alpha=0.7)
-
-    axes[1, 1].axhline(y=total_invested_ref, color='orange', linestyle='--', linewidth=2, label='累计投入')
-    axes[1, 1].set_title('各策略资产净值走势对比', fontsize=14, fontweight='bold')
-    axes[1, 1].set_xlabel('日期', fontsize=12)
-    axes[1, 1].set_ylabel('资产市值 (元)', fontsize=12)
-    axes[1, 1].legend(fontsize=9, loc='best')
-    axes[1, 1].grid(True, alpha=0.3)
-
-annot = None
+ax2.plot(df.index, portfolio_values, label='资产市值', linewidth=2, color='green')
+ax2.plot(df.index, total_invested_list, label='累计投入', linewidth=2, color='orange', linestyle='--')
+ax2.set_title('定投资产净值变化', fontsize=14, fontweight='bold')
+ax2.set_xlabel('日期', fontsize=12)
+ax2.set_ylabel('金额 (元)', fontsize=12)
+ax2.legend(fontsize=10)
+ax2.grid(True, alpha=0.3)
 
 def format_coord(x, y):
     try:
-        from matplotlib.dates import num2date
-        current_date = num2date(x)
-        target_date = pd.Timestamp(current_date)
+        # 将 Matplotlib 的内部数值转换为日期对象
+        date_obj = mdates.num2date(x)
+        date_str = date_obj.strftime('%Y-%m-%d')
+        
+        # 尝试寻找最接近的实际交易日数据
+        target_date = pd.Timestamp(date_obj).replace(tzinfo=None) # 去除时区以匹配索引
         nearest_date = df.index.asof(target_date)
         
         if nearest_date is not pd.NaT:
-            current_price = df.loc[nearest_date, 'close']
-            date_str = nearest_date.strftime('%Y-%m-%d')
-            return f'date={date_str}, 收盘价={current_price:.2f}元, y={y:.2f}'
+            price = df.loc[nearest_date, 'close']
+            return f'日期: {date_str} | 收盘价: {price:.2f}元 | 当前y轴: {y:.2f}'
+        return f'日期: {date_str} | y: {y:.2f}'
     except:
-        pass
-    return f'x={x:.4f}, y={y:.4f}'
+        return f'x={x:.4f}, y={y:.2f}'
 
-axes[1, 0].format_coord = format_coord
-axes[1, 1].format_coord = format_coord
+# 重新绑定
+ax1.format_coord = format_coord
+ax2.format_coord = format_coord
 
 plt.tight_layout()
-plt.savefig('sip_comparison.png', dpi=300, bbox_inches='tight')
-print("\n多策略对比图表已保存为: sip_comparison.png")
+plt.savefig('sip_backtest_result.png', dpi=300, bbox_inches='tight')
+print("\n回测图表已保存为: sip_backtest_result.png")
 print("\n提示: 在价格走势或资产净值图表上，鼠标悬停在坐标区域即可查看对应日期的收盘价")
 plt.show()
 
-print("\n" + "=" * 80)
-print("回测分析完成！")
-print("=" * 80)
+print("\n" + "=" * 60)
+print("回测完成！")
+print("=" * 60)
