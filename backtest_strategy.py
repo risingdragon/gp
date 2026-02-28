@@ -91,11 +91,77 @@ def backtest_sip(data, invest_day=1):
         'investment_dates': investment_dates
     }
 
-invest_day = 1
-result = backtest_sip(df, invest_day=invest_day)
+invest_day = 11
+
+def backtest_sip_with_open(data, invest_day=11):
+    data = data.copy()
+    data['year_month'] = data.index.to_period('M')
+    
+    total_invested = 0
+    total_shares = 0
+    investment_dates = []
+    
+    for year_month in data['year_month'].unique():
+        month_data = data[data['year_month'] == year_month]
+        
+        # 寻找11日或之后的第一个交易日
+        target_day = invest_day
+        invest_date = None
+        invest_price = None
+        
+        # 先找11日当天
+        for date in month_data.index:
+            if date.day == target_day:
+                invest_date = date
+                invest_price = month_data.loc[date, 'open']
+                break
+        
+        # 如果11日没开盘，找下一个交易日
+        if invest_date is None:
+            for date in month_data.index:
+                if date.day > target_day:
+                    invest_date = date
+                    invest_price = month_data.loc[date, 'open']
+                    break
+        
+        # 如果11日之后也没有（月末），就找该月最后一个交易日
+        if invest_date is None and len(month_data) > 0:
+            invest_date = month_data.index[-1]
+            invest_price = month_data.loc[invest_date, 'open']
+        
+        if invest_date is not None and invest_price is not None:
+            shares = monthly_investment / invest_price
+            
+            total_invested += monthly_investment
+            total_shares += shares
+            
+            investment_dates.append({
+                'date': invest_date,
+                'price': invest_price,
+                'shares': shares
+            })
+    
+    final_value = total_shares * data['close'].iloc[-1]
+    total_profit = final_value - total_invested
+    profit_rate = (total_profit / total_invested) * 100 if total_invested > 0 else 0
+    
+    years = (data.index[-1] - data.index[0]).days / 365.25
+    annualized_return = ((final_value / total_invested) ** (1 / years) - 1) * 100 if years > 0 and total_invested > 0 else 0
+    
+    return {
+        'total_invested': total_invested,
+        'final_value': final_value,
+        'total_profit': total_profit,
+        'profit_rate': profit_rate,
+        'annualized_return': annualized_return,
+        'investment_count': len(investment_dates),
+        'investment_dates': investment_dates
+    }
+
+result = backtest_sip_with_open(df, invest_day=invest_day)
 
 print(f"\n{'=' * 60}")
-print(f"策略: 每月{invest_day}日定投 {monthly_investment} 元")
+print(f"策略: 每月{invest_day}日(或下一个交易日)用开盘价定投 {monthly_investment} 元")
 print(f"{'=' * 60}")
 print(f"\n定投次数: {result['investment_count']} 次")
 print(f"总投入金额: {result['total_invested']:.2f} 元")
