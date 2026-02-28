@@ -191,17 +191,22 @@ ax1.grid(True, alpha=0.3)
 
 portfolio_values = []
 total_invested_list = []
+profit_list = []
 current_shares = 0
 current_invested = 0
 invest_dict = {x['date']: x['shares'] for x in result['investment_dates']}
+date_to_profit = {}
 
 for date in df.index:
     if date in invest_dict:
         current_shares += invest_dict[date]
         current_invested += monthly_investment
     value = current_shares * df.loc[date, 'close']
+    profit = value - current_invested
     portfolio_values.append(value)
     total_invested_list.append(current_invested)
+    profit_list.append(profit)
+    date_to_profit[date] = profit
 
 ax2.plot(df.index, portfolio_values, label='资产市值', linewidth=2, color='green')
 ax2.plot(df.index, total_invested_list, label='累计投入', linewidth=2, color='orange', linestyle='--')
@@ -223,7 +228,9 @@ def format_coord(x, y):
         
         if nearest_date is not pd.NaT:
             price = df.loc[nearest_date, 'close']
-            return f'日期: {date_str} | 收盘价: {price:.2f}元 | 当前y轴: {y:.2f}'
+            profit = date_to_profit[nearest_date]
+            profit_color = '+' if profit >= 0 else ''
+            return f'日期: {date_str} | 收盘价: {price:.2f}元 | 盈亏: {profit_color}{profit:.2f}元 | 当前y轴: {y:.2f}'
         return f'日期: {date_str} | y: {y:.2f}'
     except:
         return f'x={x:.4f}, y={y:.2f}'
