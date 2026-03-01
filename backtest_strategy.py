@@ -32,6 +32,17 @@ print(f"总交易日数: {len(df)}")
 print(f"首日收盘价: {df['close'].iloc[0]:.2f}")
 print(f"末日收盘价: {df['close'].iloc[-1]:.2f}")
 
+# 输入开始日期
+start_date_input = input("\n请输入开始日期 (格式: YYYY-MM-DD, 按Enter使用默认开始日期): ")
+if start_date_input:
+    start_date = pd.to_datetime(start_date_input)
+    # 过滤数据，只保留开始日期之后的数据
+    df = df[df.index >= start_date]
+    print(f"\n回测时间范围: {df.index[0]} 至 {df.index[-1]}")
+    print(f"回测交易日数: {len(df)}")
+else:
+    print(f"\n使用默认时间范围: {df.index[0]} 至 {df.index[-1]}")
+
 monthly_investment = 1000
 
 def backtest_sip(data, invest_day=1):
