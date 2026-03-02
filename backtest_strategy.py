@@ -32,16 +32,16 @@ print(f"总交易日数: {len(df)}")
 print(f"首日收盘价: {df['close'].iloc[0]:.2f}")
 print(f"末日收盘价: {df['close'].iloc[-1]:.2f}")
 
-# 输入开始日期
-start_date_input = input("\n请输入开始日期 (格式: YYYY-MM-DD, 按Enter使用默认开始日期): ")
-if start_date_input:
-    start_date = pd.to_datetime(start_date_input)
-    # 过滤数据，只保留开始日期之后的数据
-    df = df[df.index >= start_date]
-    print(f"\n回测时间范围: {df.index[0]} 至 {df.index[-1]}")
-    print(f"回测交易日数: {len(df)}")
-else:
-    print(f"\n使用默认时间范围: {df.index[0]} 至 {df.index[-1]}")
+# 输入开始日期（暂时注释掉，直接使用默认）
+# start_date_input = input("\n请输入开始日期 (格式: YYYY-MM-DD, 按Enter使用默认开始日期): ")
+# if start_date_input:
+#     start_date = pd.to_datetime(start_date_input)
+#     # 过滤数据，只保留开始日期之后的数据
+#     df = df[df.index >= start_date]
+#     print(f"\n回测时间范围: {df.index[0]} 至 {df.index[-1]}")
+#     print(f"回测交易日数: {len(df)}")
+# else:
+print(f"\n使用默认时间范围: {df.index[0]} 至 {df.index[-1]}")
 
 monthly_investment = 1000
 
@@ -203,10 +203,14 @@ ax1.grid(True, alpha=0.3)
 portfolio_values = []
 total_invested_list = []
 profit_list = []
+annualized_return_list = []
 current_shares = 0
 current_invested = 0
 invest_dict = {x['date']: x['shares'] for x in result['investment_dates']}
 date_to_profit = {}
+date_to_annualized_return = {}
+
+start_date = df.index[0]
 
 for date in df.index:
     if date in invest_dict:
@@ -214,10 +218,21 @@ for date in df.index:
         current_invested += monthly_investment
     value = current_shares * df.loc[date, 'close']
     profit = value - current_invested
+    
+    # 计算年化收益率
+    days = (date - start_date).days
+    annualized_return = 0.0
+    if days > 0 and current_invested > 0:
+        years = days / 365.25
+        if value > 0:
+            annualized_return = ((value / current_invested) ** (1 / years) - 1) * 100
+    
     portfolio_values.append(value)
     total_invested_list.append(current_invested)
     profit_list.append(profit)
+    annualized_return_list.append(annualized_return)
     date_to_profit[date] = profit
+    date_to_annualized_return[date] = annualized_return
 
 ax2.plot(df.index, portfolio_values, label='资产市值', linewidth=2, color='green')
 ax2.plot(df.index, total_invested_list, label='累计投入', linewidth=2, color='orange', linestyle='--')
@@ -240,8 +255,10 @@ def format_coord(x, y):
         if nearest_date is not pd.NaT:
             price = df.loc[nearest_date, 'close']
             profit = date_to_profit[nearest_date]
+            annualized_return = date_to_annualized_return[nearest_date]
             profit_color = '+' if profit >= 0 else ''
-            return f'日期: {date_str} | 收盘价: {price:.2f}元 | 盈亏: {profit_color}{profit:.2f}元 | 当前y轴: {y:.2f}'
+            annualized_color = '+' if annualized_return >= 0 else ''
+            return f'日期: {date_str} | 收盘价: {price:.2f}元 | 盈亏: {profit_color}{profit:.2f}元 | 年化: {annualized_color}{annualized_return:.2f}% | 当前y轴: {y:.2f}'
         return f'日期: {date_str} | y: {y:.2f}'
     except:
         return f'x={x:.4f}, y={y:.2f}'
